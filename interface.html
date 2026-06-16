@@ -1,0 +1,471 @@
+<script>
+  let listas = {};
+
+  function carregarListas(){
+    google.script.run
+    .withSuccessHandler(function(resultado){
+      listas = resultado;
+      atualizarTags('suporte');
+      atualizarTags('instituicao');
+      atualizarTags('demanda');
+      atualizarTags('categoria');
+      iniciarAutocomplete('suporteInicial', 'lista-suporteInicial', listas.suporte);
+      iniciarAutocomplete('instituicao', 'lista-instituicao', listas.instituicao);
+      iniciarAutocomplete('demanda', 'lista-demanda', listas.demanda);
+      iniciarAutocomplete('categoria', 'lista-categoria', listas.categoria);
+      iniciarAutocomplete('suporteFinal', 'lista-suporteFinal', listas.suporte);
+      iniciarAutocomplete('modal-categoria', 'lista-modal-categoria', listas.categoria);
+      iniciarAutocomplete('modal-suporteFinal', 'lista-modal-suporteFinal', listas.suporte);
+    })
+    .obterListas();
+  }
+
+  function preencherRelogio() {
+    let agora = new Date();
+    let dia = agora.getDate();
+    dia = String(dia).padStart(2, '0');
+    let mes = agora.getMonth() + 1;
+    mes = String(mes).padStart(2, '0');
+    let ano = agora.getFullYear();
+    document.getElementById("dataInicial").value = dia + "/" + mes + "/" + ano;
+    let hora = agora.getHours();
+    hora = String(hora).padStart(2, '0');
+    let minutos = agora.getMinutes();
+    minutos = String(minutos).padStart(2, '0');
+    let segundos = agora.getSeconds();
+    segundos = String(segundos).padStart(2, '0');
+    document.getElementById("horaInicial").value = hora + ":" + minutos + ":" + segundos;
+  }
+
+  function formatarDataInput(data){
+    let ano = data.getFullYear();
+    let mes = String(data.getMonth() + 1).padStart(2, '0');
+    let dia = String(data.getDate()).padStart(2, '0');
+    return ano + "-" + mes + "-" + dia;
+  }
+
+  function converterDataParaBR(dataISO){
+    let partes = dataISO.split("-");
+    return partes[2] + "/" + partes[1] + "/" + partes[0];
+  }
+
+  // CONCLUSÃO DIRETO NO REGISTRO 
+
+  function toggleConclusao(){
+    let checked = document.getElementById("jaResolvido").checked;
+    let bloco = document.getElementById("bloco-conclusao");
+    bloco.style.display = checked ? "grid" : "none";
+
+    if (checked) {
+      let dataEl = document.getElementById("dataFinalReg");
+      let horaEl = document.getElementById("horaFinalReg");
+      if (!dataEl.value || !horaEl.value) {
+        preencherDataHoraFinal();
+      }
+    }
+  }
+
+  function preencherDataHoraFinal(){
+    let agora = new Date();
+    document.getElementById("dataFinalReg").value = formatarDataInput(agora);
+
+    let hora = String(agora.getHours()).padStart(2, '0');
+    let min = String(agora.getMinutes()).padStart(2, '0');
+    let seg = String(agora.getSeconds()).padStart(2, '0');
+    document.getElementById("horaFinalReg").value = hora + ":" + min + ":" + seg;
+  }
+
+  // REGISTRO 
+
+  function registrar(){
+    let jaResolvido = document.getElementById("jaResolvido").checked;
+    let msg = document.getElementById("msg-form");
+
+    let dados = {
+      suporteInicial: document.getElementById("suporteInicial").value,
+      solicitante: document.getElementById("solicitante").value,
+      instituicao: document.getElementById("instituicao").value,
+      demanda: document.getElementById("demanda").value,
+      motivo: document.getElementById("oQueFoi").value,
+      resolucao: document.getElementById("comoResolvido").value,
+      categoria: document.getElementById("categoria").value,
+      suporteFinal: document.getElementById("suporteFinal").value,
+      observacao: document.getElementById("obs").value,
+      concluido: jaResolvido
+    };
+
+    if (jaResolvido) {
+      if (!dados.resolucao || !dados.categoria || !dados.suporteFinal) {
+        msg.className = "msg error";
+        msg.textContent = 'Para registrar como concluído, preencha "Como foi resolvido", "Categoria" e "Suporte final".';
+        return;
+      }
+
+      let dataFinalInput = document.getElementById("dataFinalReg").value;
+      let horaFinalInput = document.getElementById("horaFinalReg").value;
+
+      if (!dataFinalInput || !horaFinalInput) {
+        msg.className = "msg error";
+        msg.textContent = "Informe a data e a hora de conclusão.";
+        return;
+      }
+
+      dados.dataFinal = converterDataParaBR(dataFinalInput);
+      dados.horaFinal = horaFinalInput.length === 5 ? (horaFinalInput + ":00") : horaFinalInput;
+    }
+
+    msg.className = "msg";
+    msg.textContent = "";
+
+    google.script.run
+      .withSuccessHandler(function() {
+        msg.className = "msg success";
+        msg.textContent = jaResolvido ? "Chamado registrado como concluído!" : "Chamado registrado com sucesso!";
+        limparFormulario();
+      })
+      .withFailureHandler(function(erro) {
+        msg.className = "msg error";
+        msg.textContent = "Erro: " + erro.message;
+      })
+      .registrarChamado(dados);
+  }
+
+  function limparFormulario(){
+    ["suporteInicial","solicitante","instituicao","demanda","oQueFoi","comoResolvido","categoria","suporteFinal","obs"].forEach(function(id){
+      let el = document.getElementById(id);
+      el.value = "";
+      el.classList.remove("selecionado");
+    });
+
+    document.getElementById("jaResolvido").checked = false;
+    document.getElementById("bloco-conclusao").style.display = "none";
+    document.getElementById("dataFinalReg").value = "";
+    document.getElementById("horaFinalReg").value = "";
+  }
+
+  function inicializar() {
+    preencherRelogio();
+    carregarListas();
+    setInterval(preencherRelogio, 1000);
+
+    let hoje = new Date();
+    let primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    document.getElementById("filtroDataInicio").value = formatarDataInput(primeiroDia);
+    document.getElementById("filtroDataFim").value = formatarDataInput(hoje);
+  }
+  window.onload = inicializar;
+
+  //  CONFIGURAÇÕES (LISTAS) 
+
+  function adicionarItem(chave) {
+    let input = document.getElementById("input-" + chave);
+    let valor = input.value.trim();
+    if (valor == "") {
+      alert("Campo Vazio!");
+      return;
+    }
+    listas[chave].push(valor);
+    google.script.run.salvarListas(listas);
+    atualizarTags(chave);
+    input.value = "";
+  }
+
+  function atualizarTags(chave){
+    let container = document.getElementById("tags-" + chave);
+    if (!container) return;
+    container.innerHTML = "";
+    (listas[chave] || []).forEach(function(item){
+      let tag = document.createElement("span");
+      tag.className = "tag";
+      tag.innerHTML = item + ' <span class="tag-x" onclick="removerItem(\'' + chave + '\', \'' + item + '\')">×</span>';
+      container.appendChild(tag);
+    });
+  }
+
+  function removerItem(chave, valor){
+    let index = listas[chave].indexOf(valor);
+    if (index > -1) listas[chave].splice(index, 1);
+    google.script.run.salvarListas(listas);
+    atualizarTags(chave);
+  }
+
+  // NAVEGAÇÃO ENTRE ABAS 
+
+  function mostrarAba(nome, el) {
+    document.querySelectorAll('.content').forEach(function(c) {
+      c.style.display = 'none';
+    });
+    document.querySelectorAll('.tab').forEach(function(t) {
+      t.classList.remove('active');
+    });
+    document.getElementById('aba-' + nome).style.display = 'block';
+    el.classList.add('active');
+
+    if (nome == 'painel'){
+      atualizarPainel();
+    }
+  }
+
+  // AUTOCOMPLETE 
+
+  function iniciarAutocomplete(inputId, listaId, opcoes) {
+    let input = document.getElementById(inputId);
+    let lista = document.getElementById(listaId);
+    if (!input || !lista) return;
+
+    input.addEventListener('input', function() {
+      let termo = input.value.toLowerCase();
+      lista.innerHTML = '';
+      if (termo === '') { lista.style.display = 'none'; return; }
+      let filtradas = opcoes.filter(function(op) {
+        return op.toLowerCase().includes(termo);
+      });
+      if (filtradas.length === 0) { lista.style.display = 'none'; return; }
+      filtradas.forEach(function(op) {
+        let div = document.createElement('div');
+        div.textContent = op;
+        div.onclick = function() {
+          input.value = op;
+          input.classList.add('selecionado');
+          lista.style.display = 'none';
+        };
+        lista.appendChild(div);
+      });
+      lista.style.display = 'block';
+    });
+
+    input.addEventListener('keydown', function(e) {
+      let itens = lista.querySelectorAll('div');
+      let ativo = lista.querySelector('div.ativo');
+      let index = Array.from(itens).indexOf(ativo);
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (ativo) ativo.classList.remove('ativo');
+        let proximo = itens[index + 1] || itens[0];
+        if (proximo) { proximo.classList.add('ativo'); input.value = proximo.textContent; }
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (ativo) ativo.classList.remove('ativo');
+        let anterior = itens[index - 1] || itens[itens.length - 1];
+        if (anterior) { anterior.classList.add('ativo'); input.value = anterior.textContent; }
+      }
+      if (e.key === 'Enter') {
+        if (ativo) {
+          input.value = ativo.textContent;
+          input.classList.add('selecionado');
+          lista.style.display = 'none';
+        }
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!input.contains(e.target) && !lista.contains(e.target)) {
+        lista.style.display = 'none';
+      }
+    });
+  }
+
+  // PAINEL 
+
+  function atualizarPainel(){
+    let dataInicio = document.getElementById("filtroDataInicio").value;
+    let dataFim = document.getElementById("filtroDataFim").value;
+
+    google.script.run
+      .withSuccessHandler(function(painel){
+        renderizarPainel(painel);
+      })
+      .withFailureHandler(function(erro){
+        alert("Erro ao carregar painel: " + erro.message);
+      })
+      .obterDadosPainel(dataInicio, dataFim);
+  }
+
+  function renderizarPainel(painel){
+    if (!painel) {
+      painel = { abertos: [], totalAbertos: 0, totalConcluidos: 0, totalPeriodo: 0, porDia: [], porAtendente: [] };
+    }
+
+    document.getElementById("totalAbertos").textContent = painel.totalAbertos;
+    document.getElementById("totalConcluidos").textContent = painel.totalConcluidos;
+    document.getElementById("totalDia").textContent = painel.totalPeriodo;
+
+    let container = document.getElementById("lista-abertos");
+    container.innerHTML = "";
+
+    if (!painel.abertos || painel.abertos.length === 0) {
+      container.innerHTML = '<div class="empty-state">Nenhum chamado em aberto</div>';
+    } else {
+      painel.abertos.forEach(function(chamado){
+        let card = document.createElement("div");
+        card.className = "chamado-aberto";
+        card.innerHTML =
+          '<div class="chamado-header">' +
+            '<span class="chamado-nome">#' + chamado.numero + ' · ' + chamado.solicitante + '</span>' +
+            '<span class="badge-aberto">Em andamento</span>' +
+          '</div>' +
+          '<div class="chamado-detalhe">' + chamado.instituicao + ' — ' + chamado.demanda + '</div>' +
+          '<div class="chamado-detalhe">' + chamado.motivo + '</div>';
+        card.onclick = function(){ abrirModal(chamado); };
+        container.appendChild(card);
+      });
+    }
+
+    renderizarGraficoPeriodo(painel.porDia || []);
+    renderizarGraficoAtendentes(painel.porAtendente || []);
+  }
+
+  //  GRÁFICOS 
+
+  function renderizarGraficoPeriodo(porDia){
+    let container = document.getElementById("graficoPeriodo");
+    container.innerHTML = "";
+
+    if (!porDia || porDia.length === 0) {
+      container.innerHTML = '<div class="empty-state">Sem dados no período selecionado</div>';
+      return;
+    }
+
+    let max = 0;
+    porDia.forEach(function(d){ if (d.total > max) max = d.total; });
+    if (max === 0) max = 1;
+
+    let wrap = document.createElement("div");
+    wrap.className = "bar-chart-vertical";
+
+    porDia.forEach(function(d){
+      let col = document.createElement("div");
+      col.className = "bar-col";
+
+      let valor = document.createElement("div");
+      valor.className = "bar-value";
+      valor.textContent = d.total;
+
+      let bar = document.createElement("div");
+      bar.className = "bar";
+      bar.style.height = Math.max((d.total / max) * 100, 2) + "px";
+
+      let label = document.createElement("div");
+      label.className = "bar-label";
+      label.textContent = d.data;
+
+      col.appendChild(valor);
+      col.appendChild(bar);
+      col.appendChild(label);
+      wrap.appendChild(col);
+    });
+
+    container.appendChild(wrap);
+  }
+
+  function renderizarGraficoAtendentes(porAtendente){
+    let container = document.getElementById("graficoAtendentes");
+    container.innerHTML = "";
+
+    if (!porAtendente || porAtendente.length === 0) {
+      container.innerHTML = '<div class="empty-state">Sem dados no período selecionado</div>';
+      return;
+    }
+
+    let max = 0;
+    porAtendente.forEach(function(a){ if (a.total > max) max = a.total; });
+    if (max === 0) max = 1;
+
+    let wrap = document.createElement("div");
+    wrap.className = "bar-chart-horizontal";
+
+    porAtendente.forEach(function(a){
+      let row = document.createElement("div");
+      row.className = "bar-row";
+
+      let label = document.createElement("div");
+      label.className = "bar-row-label";
+      label.textContent = a.nome;
+      label.title = a.nome;
+
+      let track = document.createElement("div");
+      track.className = "bar-row-track";
+
+      let fill = document.createElement("div");
+      fill.className = "bar-row-fill";
+      fill.style.width = ((a.total / max) * 100) + "%";
+
+      let valor = document.createElement("div");
+      valor.className = "bar-row-value";
+      valor.textContent = a.total;
+
+      track.appendChild(fill);
+      row.appendChild(label);
+      row.appendChild(track);
+      row.appendChild(valor);
+      wrap.appendChild(row);
+    });
+
+    container.appendChild(wrap);
+  }
+
+  //  MODAL: CONCLUIR CHAMADO 
+
+  function abrirModal(chamado){
+    document.getElementById("modal-linha").value = chamado.linha;
+    document.getElementById("modal-titulo").textContent = "Chamado #" + chamado.numero + " — " + chamado.solicitante;
+    document.getElementById("modal-resolucao").value = chamado.resolucao || "";
+    document.getElementById("modal-categoria").value = chamado.categoria || "";
+    document.getElementById("modal-suporteFinal").value = chamado.suporteFinal || "";
+    document.getElementById("modal-obs").value = chamado.observacao || "";
+
+    document.getElementById("modal-categoria").classList.remove("selecionado");
+    document.getElementById("modal-suporteFinal").classList.remove("selecionado");
+
+    let msg = document.getElementById("msg-modal");
+    msg.className = "msg";
+    msg.textContent = "";
+
+    document.getElementById("modal").classList.add("open");
+  }
+
+  function fecharModal(){
+    document.getElementById("modal").classList.remove("open");
+  }
+
+  function concluirChamado(){
+    let linha = parseInt(document.getElementById("modal-linha").value, 10);
+    let resolucao = document.getElementById("modal-resolucao").value.trim();
+    let categoria = document.getElementById("modal-categoria").value.trim();
+    let suporteFinal = document.getElementById("modal-suporteFinal").value.trim();
+    let observacao = document.getElementById("modal-obs").value;
+
+    let msg = document.getElementById("msg-modal");
+
+    if (!resolucao || !categoria || !suporteFinal) {
+      msg.className = "msg error";
+      msg.textContent = "Preencha resolução, categoria e suporte final.";
+      return;
+    }
+
+    msg.className = "msg";
+    msg.textContent = "";
+
+    let dados = {
+      linha: linha,
+      resolucao: resolucao,
+      categoria: categoria,
+      suporteFinal: suporteFinal,
+      observacao: observacao
+    };
+
+    google.script.run
+      .withSuccessHandler(function(){
+        fecharModal();
+        atualizarPainel();
+      })
+      .withFailureHandler(function(erro){
+        msg.className = "msg error";
+        msg.textContent = "Erro: " + erro.message;
+      })
+      .concluirChamado(dados);
+  }
+</script>
